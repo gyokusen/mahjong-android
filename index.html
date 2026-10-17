@@ -193,7 +193,12 @@ body{flex-direction:column;padding:env(safe-area-inset-top) env(safe-area-inset-
 #sideClose{font-size:18px;border:0;background:none;padding:0 4px;cursor:pointer}
 #log{max-height:30vh}
 /* 結果の窓：高さが低いので詰める */
-#modalBox{padding:10px 14px;min-width:0;max-width:96vw;max-height:94vh}
+#modalBox{padding:10px 14px;min-width:0;max-width:96vw;max-height:94vh;touch-action:pan-y}
+/* 和了：役の表と点数を左右に並べて、縦に収める（縦に積むと見出しが上にはみ出す） */
+.rbody{display:flex;gap:18px;align-items:flex-start}
+.rbody table.yaku{min-width:0;flex:0 1 auto;margin:0}
+.rsum{flex:1 1 auto;min-width:0}
+.rsum .pts{margin-top:0}
 #modalBox h2{font-size:16px;margin-bottom:6px}
 #modalBox .tile.M{--w:26px;--h:36px}
 table.yaku td,table.delta td,table.final td{padding:2px 8px;font-size:13px}
@@ -562,7 +567,7 @@ function paymentOf(res, winnerIsDealer, tsumo) {
 // ===========================================================================
 //  対局の進行・CPU の打ち方・画面
 // ===========================================================================
-const APP_VER = '1.0.0';
+const APP_VER = '1.0.1';
 const NAMES = ['自分', '下家', '対面', '上家'];
 const REL = ['自分', '下家', '対面', '上家'];
 const $ = id => document.getElementById(id);
@@ -1515,8 +1520,8 @@ async function showResult(r) {
     html = `<h2>${W.name}　${r.tsumo ? 'ツモ' : 'ロン'}${r.tsumo ? '' : '（' + G.players[r.from].name + 'から）'}</h2>` +
       hand.outerHTML +
       `<div class="doras">ドラ表示 ${tilesHtml(r.dora, 'XS')}${r.ura.length ? '　裏ドラ表示 ' + tilesHtml(r.ura, 'XS') : ''}</div>` +
-      '<table class="yaku">' + res.yaku.map(([n, h]) => `<tr><td>${n}</td><td class="num">${res.yakuman ? '役満' : h + '翻'}</td></tr>`).join('') + '</table>' +
-      `<div class="pts">${pts}<b>${r.payText}</b></div>` + deltaTable(r.delta);
+      '<div class="rbody"><table class="yaku">' + res.yaku.map(([n, h]) => `<tr><td>${n}</td><td class="num">${res.yakuman ? '役満' : h + '翻'}</td></tr>`).join('') + '</table>' +
+      `<div class="rsum"><div class="pts">${pts}<b>${r.payText}</b></div>` + deltaTable(r.delta) + '</div></div>';
   } else {
     html = `<h2>流局</h2><div class="tenlist">` + G.players.map((P, q) =>
       `<div><b>${P.name}</b> ${r.tenpai[q] ? '<span class="ok">聴牌</span>' : '<span class="bad">不聴</span>'}` +

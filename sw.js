@@ -4,7 +4,7 @@
 
    ★ 名前はほかのアプリ（bsa-* バトルシップ・eiw-* 英単語・wta-* 作業時間管理 など）と別にしてある。
      同じ gyokusen.github.io に置くので、名前がぶつかると片方の更新でもう片方の控えが消える。 */
-const CACHE = "mja-v1";
+const CACHE = "mja-v2";
 const FILES = [
   "./",
   "./index.html",
