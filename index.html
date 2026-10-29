@@ -48,6 +48,29 @@ label.ck{display:flex;align-items:center;gap:6px;font-size:13px;margin:2px 0;cur
 #state small{color:#777}
 .ok{color:#1b7f3b}.bad{color:#c0392b}
 #log{flex:1 1 auto;min-height:60px;margin:0;padding:6px 12px;font-size:12px;overflow:auto;white-space:pre-wrap;border-top:1px solid var(--line);font-family:inherit;color:#444}
+#btnHaifu{width:100%;padding:7px;font:inherit;font-size:14px;border-radius:6px;border:1px solid #8a7440;background:#fff8e0;cursor:pointer;margin-top:6px}
+/* 牌譜 */
+#haifu{position:fixed;inset:0;z-index:60;background:#0f3d28;color:#f3efe0;display:flex;flex-direction:column;font-size:14px}
+#haifu[hidden]{display:none}
+#haifu .hbar{display:flex;align-items:center;gap:8px;padding:6px 10px;background:rgba(0,0,0,.35);flex:0 0 auto;flex-wrap:wrap}
+#haifu .hbar .sp{flex:1 1 auto}
+#haifu button{font:inherit;font-size:14px;padding:4px 12px;border-radius:7px;border:1px solid #c9a55a;background:#fff8e0;color:#222;cursor:pointer}
+#haifu button:disabled{opacity:.4;cursor:default}
+#haifu .hbody{flex:1 1 auto;overflow:auto;padding:8px 10px}
+#haifu table.hlist{border-collapse:collapse;width:100%}
+#haifu table.hlist td{padding:6px 8px;border-bottom:1px solid rgba(255,255,255,.12);cursor:pointer;white-space:nowrap}
+#haifu table.hlist tr:hover td{background:rgba(255,255,255,.08)}
+#haifu .ym{color:#ffd84a;font-weight:bold}
+#haifu .hp{display:flex;gap:10px;align-items:flex-start;padding:5px 6px;border-radius:7px;margin-bottom:4px;background:rgba(0,0,0,.18)}
+#haifu .hp.turn{background:rgba(255,216,74,.18)}
+#haifu .hp .who{width:92px;flex:0 0 92px;font-size:12px;line-height:1.35}
+#haifu .hp .rows{display:flex;flex-direction:column;gap:4px;min-width:0}
+#haifu .hp .line{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap}
+#haifu .hand,#haifu .pond{display:flex;flex-wrap:wrap;gap:1px}
+#haifu .tile.lastd{outline:2px solid #ffd84a}
+#haifu .act{margin:2px 0 8px;font-size:15px}
+#haifu .dora{display:flex;gap:2px;align-items:center}
+#haifu input[type=range]{flex:1 1 160px;min-width:120px}
 #btnNew{width:100%;padding:7px;font:inherit;font-size:14px;border-radius:6px;border:1px solid #8a7440;background:#fff8e0;cursor:pointer}
 
 /* ---- 牌 ---- */
@@ -226,6 +249,7 @@ table.yaku td,table.delta td,table.final td{padding:2px 8px;font-size:13px}
   <div class="sec">
     <h3>アシスト</h3>
     <label class="ck"><input type="checkbox" id="optHint">切る牌のヒント（★）</label>
+    <div class="row2">ヒントの方針<select id="hintSel"><option value="speed">スピード重視</option><option value="yaku">役作り重視</option></select></div>
     <label class="ck"><input type="checkbox" id="optGiri">立直後は自動でツモ切り</label>
     <label class="ck"><input type="checkbox" id="optNoCall">鳴きを聞かない（ロンだけ聞く）</label>
     <label class="ck"><input type="checkbox" id="optCpu">CPUの手を見せる</label>
@@ -235,10 +259,12 @@ table.yaku td,table.delta td,table.final td{padding:2px 8px;font-size:13px}
   <div class="sec">
     <div class="row2"><select id="lenSel"><option value="tonnan">東南戦（半荘）</option><option value="tonpu">東風戦</option></select></div>
     <button id="btnNew">新しい対局</button>
+    <button id="btnHaifu">牌譜（これまでの局を再生）</button>
   </div>
   <pre id="log"></pre>
 </div>
 <div id="modal" hidden><div id="modalBox"></div></div>
+<div id="haifu" hidden></div>
 <div id="actions" class="actions"></div>
 <div id="rotate"><div class="ph"></div>スマホを横向きにしてください</div>
 <script>
@@ -567,7 +593,7 @@ function paymentOf(res, winnerIsDealer, tsumo) {
 // ===========================================================================
 //  対局の進行・CPU の打ち方・画面
 // ===========================================================================
-const APP_VER = '1.0.1';
+const APP_VER = '1.4.1';
 const NAMES = ['自分', '下家', '対面', '上家'];
 const REL = ['自分', '下家', '対面', '上家'];
 const $ = id => document.getElementById(id);
@@ -581,7 +607,7 @@ let CFG = {
   cpu_delay_ms: 500, game_length: 'tonnan', start_score: 25000, default_view: 'taku',
   voice_self: 'man', voice_cpu: 'ol', sound_volume: 70, show_cpu_hands: false
 };
-const UI = { view: 'taku', hint: true, autoGiri: true, noCalls: false, showCpu: false,
+const UI = { view: 'taku', hint: true, hintStyle: 'speed', autoGiri: true, noCalls: false, showCpu: false,
              voiceSelf: 'man', voiceCpu: 'ol', speed: 'normal', riichiMode: false };
 // CPU の速さ（ふつう＝ini の cpu_delay_ms）
 const SPEEDS = { fast: ['速い', 250], normal: ['ふつう', null], slow: ['ゆっくり', 1200], vslow: ['とてもゆっくり', 2000] };
@@ -654,6 +680,8 @@ function setupHand() {
   for (let n = 0; n < 13; n++) for (let d = 0; d < 4; d++) G.players[(G.dealer + d) % 4].hand.push(G.live[G.livePos++]);
   G.players.forEach(P => sortIds(P.hand));
   UI.riichiMode = false;
+  G.callUndo = null;
+  recStart();
 }
 const isMenzen = P => P.melds.every(m => m.type === 'ankan');
 const meldsForEval = P => P.melds.map(m => ({ type: m.type, kinds: m.ids.map(x => x >> 2) }));
@@ -718,15 +746,42 @@ function dangerOf(k, q, vis) {
   if (n <= 2) suji = has(n + 3);
   else if (n >= 6) suji = has(n - 3);
   else { const a = has(n - 3), b = has(n + 3); suji = a && b; half = a || b; }
-  if (suji) return (n === 0 || n === 8) ? 1.5 : 2.5;
+  if (suji) return (n === 0 || n === 8) ? 3.5 : 4.5;   // 筋は「無筋よりまし」止まり。現物・字牌を優先する
   if (half) return 5;
   return (n === 0 || n === 8) ? 6 : (n === 1 || n === 7) ? 7 : 8;
 }
 function hasYakuMeld(P, p) {
   return P.melds.some(m => m.type !== 'chi' && isYakuhaiKind(m.ids[0] >> 2, roundWind(), seatWind(p)));
 }
-// 捨て牌を選ぶ（CPU と、人へのヒントで共用）
-function chooseDiscard(p, forHint) {
+// 役の芽を点にする（役作り重視のヒント用）。c は切った後の手（34種の枚数）。副露も数える
+function yakuPotential(c, P) {
+  const has = c.slice();
+  for (const m of P.melds) for (const id of m.ids) has[id >> 2]++;
+  const pres = k => has[k] > 0 ? 1 : 0;
+  const sq = (d, t, w) => d > t ? (d - t) * (d - t) * w : 0;
+  let pot = 0, best = 0;
+  // 三色同順：同じ並び（n,n+1,n+2）を萬・筒・索で何種持っているか（9種中）
+  for (let n = 0; n <= 6; n++) { let d = 0; for (let s = 0; s < 3; s++) for (let j = 0; j < 3; j++) d += pres(s * 9 + n + j); best = Math.max(best, d); }
+  pot += sq(best, 4, 60);
+  // 一気通貫：1色の1〜9を何種持っているか
+  best = 0;
+  for (let s = 0; s < 3; s++) { let d = 0; for (let j = 0; j < 9; j++) d += pres(s * 9 + j); best = Math.max(best, d); }
+  pot += sq(best, 5, 60);
+  // 混一色・清一色：1色＋字牌の枚数
+  let hon = 0; for (let k = 27; k < 34; k++) hon += has[k];
+  best = 0;
+  for (let s = 0; s < 3; s++) { let d = hon; for (let j = 0; j < 9; j++) d += has[s * 9 + j]; best = Math.max(best, d); }
+  pot += sq(best, 8, 40);
+  // 断么九：么九牌が少ないほど
+  let yao = 0; for (let k = 0; k < 34; k++) if (isYaochu(k)) yao += has[k];
+  if (yao <= 3) pot += (4 - yao) * 80;
+  // 対々和・七対子：対子以上の種類数
+  let pairs = 0; for (let k = 0; k < 34; k++) if (has[k] >= 2) pairs++;
+  pot += sq(pairs, 3, 50);
+  return pot;
+}
+// 捨て牌を選ぶ（CPU と、人へのヒントで共用）。style：'speed'＝スピード重視／'yaku'＝役作り重視（ヒントのみ）
+function chooseDiscard(p, forHint, style) {
   const P = G.players[p];
   const nM = P.melds.length;
   const c = countsOf(P.hand);
@@ -736,10 +791,12 @@ function chooseDiscard(p, forHint) {
   if (kinds.some(k => !forbid.has(k))) kinds = kinds.filter(k => !forbid.has(k));
   const dk = new Set(doraInds().map(doraOf));
   const openNoYaku = !isMenzen(P) && !hasYakuMeld(P, p);
+  const yakuMode = !!forHint && style === 'yaku';
   const cands = [];
   for (const k of kinds) {
     c[k]--;
     const sh = shanten(c, nM);
+    const pot = yakuMode ? yakuPotential(c, P) : 0;
     let uke = 0;
     for (let j = 0; j < 34; j++) {
       const rest = 4 - vis[j] - (j === k ? 0 : 0);
@@ -755,7 +812,7 @@ function chooseDiscard(p, forHint) {
     else if (k % 9 === 1 || k % 9 === 7) val += 1;
     if (dk.has(k)) val -= 6;
     if (openNoYaku && isYaochu(k)) val += 40;
-    cands.push({ k, sh, uke, eff: -sh * 10000 + uke * 10 + val });
+    cands.push({ k, sh, uke, eff: -sh * 10000 + uke * 10 + val + pot });
   }
   const bestSh = Math.min(...cands.map(x => x.sh));
   const threats = G.players.filter(q => q.i !== p && (q.riichi || q.riichiPending));
@@ -882,7 +939,8 @@ async function humanSelf(p, drew, rinshan) {
     allowed = new Set(P.hand.filter(x => !f.has(x >> 2)));
     if (!allowed.size) allowed = new Set(P.hand);
   }
-  return await waitHuman('self', { tsumo, kans, riichiIds, allowed });
+  const undo = !drew && !!G.callUndo && G.callUndo.who === p;
+  return await waitHuman('self', { tsumo, kans, riichiIds, allowed, undo });
 }
 
 // ===========================================================================
@@ -900,7 +958,9 @@ function doDiscard(p, id, riichi) {
   if (P.ippatsu && !riichi) P.ippatsu = false;
   if (riichi) { P.riichiPending = true; P.dbl = P.turns === 0 && !G.anyCall; }
   P.turns++;
+  rec(['x', p, id, riichi ? 1 : 0]);
   P.forbid = null;
+  G.callUndo = null;
   G.drawnId = null;
   G.last = { p, id };
   for (const q of G.players) if (q.riichi && q !== P) q.safeAfter.add(k);
@@ -911,6 +971,7 @@ function commitRiichi(p) {
   const P = G.players[p];
   if (!P.riichiPending) return;
   P.riichiPending = false; P.riichi = true; P.ippatsu = true;
+  rec(['r', p]);
   P.score -= 1000; G.kyotaku++;
 }
 function takeFromHand(P, k, n) {
@@ -943,6 +1004,7 @@ function applyCall(from, who, act) {
   else if (act.type === 'pon') { ids = takeFromHand(P, k, 2); type = 'pon'; }
   else { ids = takeFromHand(P, k, 3); type = 'minkan'; }
   P.melds.push({ type, ids: ids.concat([id]), called: id, from: rel });
+  rec(['c', who, from, type, ids.slice(), id]);
   P.open = true;
   const f = new Set([k]);
   if (type === 'chi') {
@@ -951,10 +1013,27 @@ function applyCall(from, who, act) {
     if (ks[2] === k && k % 9 >= 3) f.add(k - 3);
   }
   P.forbid = type === 'minkan' ? null : f;
-  if (type === 'minkan') { G.kans++; G.doraN++; }
+  if (type === 'minkan') { G.kans++; G.doraN++; rec(['n', G.doraN]); }
   sound(type === 'chi' ? 'chi' : type === 'pon' ? 'pon' : 'kan', who);
   sound('naki', who);
   log(`${P.name}：${type === 'chi' ? 'チー' : type === 'pon' ? 'ポン' : 'カン'}（${tileName(k)}）`);
+}
+// 人の鳴きを、切る前なら取り消せるようにする（喰い替えで切りたい牌が切れないときなど）
+function callSnapshot(from, who) {
+  const P = G.players[who], F = G.players[from];
+  return { from, who, hand: P.hand.slice(), melds: P.melds.length, open: P.open, forbid: P.forbid,
+           anyCall: G.anyCall, ipp: G.players.map(q => q.ippatsu), yoko: !!F.yokoNext, recLen: REC ? REC.ev.length : 0 };
+}
+function undoCall() {
+  const s = G.callUndo; G.callUndo = null;
+  if (REC) REC.ev.length = s.recLen;
+  const P = G.players[s.who], F = G.players[s.from];
+  P.hand = s.hand; sortIds(P.hand); P.melds.length = s.melds; P.open = s.open; P.forbid = s.forbid;
+  G.anyCall = s.anyCall; G.players.forEach((q, i) => { q.ippatsu = s.ipp[i]; }); F.yokoNext = s.yoko;
+  const src = F.pond[F.pond.length - 1]; src.called = false;
+  G.drawnId = null; G.last = { p: s.from, id: src.id };
+  log(`${P.name}：鳴きを取り消し`);
+  return (s.from + 1) % 4;                    // 見送った扱いで、捨てた人の次へ
 }
 async function doSelfKan(p, act) {
   const P = G.players[p], k = act.kind;
@@ -963,10 +1042,12 @@ async function doSelfKan(p, act) {
   if (act.kan === 'ankan') {
     const ids = takeFromHand(P, k, 4);
     P.melds.push({ type: 'ankan', ids, called: null, from: 0 });
+    rec(['a', p, k]);
   } else {
     const m = P.melds.find(m => m.type === 'pon' && (m.ids[0] >> 2) === k);
     const id = takeFromHand(P, k, 1)[0];
     m.type = 'kakan'; m.ids.push(id); m.added = id;
+    rec(['k', p, id]);
     sound('kan', p);
     log(`${P.name}：加槓（${tileName(k)}）`);
     render();
@@ -980,7 +1061,7 @@ async function doSelfKan(p, act) {
       Qp.tempFuriten = true; if (Qp.riichi) Qp.riichiFuriten = true;
     }
   }
-  G.kans++; G.doraN++;
+  G.kans++; G.doraN++; rec(['n', G.doraN]);
   if (act.kan === 'ankan') { sound('kan', p); log(`${P.name}：暗槓（${tileName(k)}）`); }
   return null;
 }
@@ -1092,29 +1173,33 @@ async function playHand() {
     let rinshan = false;
     if (draw === 'live') {
       if (remaining() <= 0) return exhaustiveDraw();
-      const id = G.live[G.livePos++]; P.hand.push(id); G.drawnId = id;
+      const id = G.live[G.livePos++]; P.hand.push(id); G.drawnId = id; rec(['d', cur, id]);
     } else if (draw === 'rinshan') {
-      const id = G.dead[G.rinshanPos++]; P.hand.push(id); G.drawnId = id; rinshan = true;
+      const id = G.dead[G.rinshanPos++]; P.hand.push(id); G.drawnId = id; rinshan = true; rec(['d', cur, id]);
     } else G.drawnId = null;
     const drew = draw !== null;
+    let undone = false;
     while (true) {
       render();
       const act = P.human ? await humanSelf(cur, drew, rinshan) : await cpuSelf(cur, drew, rinshan);
       if (act.type === 'tsumo') return settleWin(cur, null, act.res, G.drawnId);
+      if (act.type === 'undoCall') { cur = undoCall(); draw = 'live'; undone = true; break; }
       if (act.type === 'kan') {
         const r = await doSelfKan(cur, act);
         if (r) return r;
-        const id = G.dead[G.rinshanPos++]; P.hand.push(id); G.drawnId = id; rinshan = true;
+        const id = G.dead[G.rinshanPos++]; P.hand.push(id); G.drawnId = id; rinshan = true; rec(['d', cur, id]);
         continue;
       }
       doDiscard(cur, act.id, act.riichi);
       break;
     }
+    if (undone) { render(); continue; }
     render();
     const res = await reactions(cur);
     if (res.type === 'ron') return res.result;
     commitRiichi(cur);
     if (res.type === 'call') {
+      G.callUndo = (G.players[res.who].human && res.act.type !== 'kan') ? callSnapshot(cur, res.who) : null;
       applyCall(cur, res.who, res.act);
       cur = res.who;
       draw = res.act.type === 'kan' ? 'rinshan' : null;
@@ -1140,6 +1225,181 @@ function ranking() {
   if (G.kyotaku) { G.players[order[0]].score += G.kyotaku * 1000; G.kyotaku = 0; }
   return order;
 }
+// ===========================================================================
+//  牌譜（局ごとに配牌と全員の行動を残し、あとから1手ずつ再生する）
+//  ev の形：['d',p,id]ツモ ['x',p,id,立直]打牌 ['c',who,from,type,手の牌,鳴いた牌]鳴き
+//           ['a',p,種類]暗槓 ['k',p,id]加槓 ['n',ドラの数] ['r',p]立直の千点
+// ===========================================================================
+let REC = null;
+const HAIFU_KEY = 'mahjong_haifu', HAIFU_KEEP = 1000; // スマホ版：役満は全部＋それ以外は直近1000局（1局およそ1.7KB）
+function recStart() {
+  const d = new Date(), z = n => String(n).padStart(2, '0');
+  REC = { v: 1, at: `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`,
+          round: G.round, honba: G.honba, kyotaku: G.kyotaku, dealer: G.dealer,
+          names: G.players.map(P => P.name), scores: G.players.map(P => P.score),
+          dead: G.dead.slice(), hands: G.players.map(P => P.hand.slice()), ev: [] };
+}
+function rec(e) { if (REC) REC.ev.push(e); }
+async function recFinish(r) {
+  if (!REC) return;
+  const R = REC; REC = null;
+  R.title = `${['東', '南', '西', '北'][Math.floor(R.round / 4)]}${R.round % 4 + 1}局 ${R.honba}本場`;
+  if (r.type === 'win') {
+    const res = r.res;
+    R.res = { t: 'win', w: r.winner, f: r.from, tsumo: r.tsumo, winId: r.winId, yaku: res.yaku, han: res.han, fu: res.fu,
+              ym: res.yakuman || 0, limit: res.limit || '', pay: r.payText, delta: r.delta, ura: r.ura || [] };
+    R.ym = (res.yakuman || 0) > 0;
+    R.summary = `${R.names[r.winner]} ${r.tsumo ? 'ツモ' : 'ロン'}　${res.limit || (res.fu + '符' + res.han + '翻')}` +
+                (R.ym ? '（' + res.yaku.map(y => y[0]).join('・') + '）' : '');
+  } else {
+    R.res = { t: 'draw', ten: r.tenpai, delta: r.delta };
+    R.ym = false; R.summary = '流局';
+  }
+  try {
+    const api = window.pywebview && window.pywebview.api;
+    if (api && api.haifu_save) { await api.haifu_save(R); return; }
+    let a = JSON.parse(localStorage.getItem(HAIFU_KEY) || '[]');
+    a.push(R);
+    const others = a.filter(x => !x.ym);
+    if (others.length > HAIFU_KEEP) { const drop = new Set(others.slice(0, others.length - HAIFU_KEEP)); a = a.filter(x => !drop.has(x)); }
+    for (let i = 0; i < 5; i++) {               // 容量あふれのときは古い順に捨てて入れ直す
+      try { localStorage.setItem(HAIFU_KEY, JSON.stringify(a)); break; }
+      catch (e) { const k = a.findIndex(x => !x.ym); a.splice(k >= 0 ? k : 0, 1); }
+    }
+  } catch (e) {}
+}
+async function haifuList(onlyYm) {
+  const api = window.pywebview && window.pywebview.api;
+  if (api && api.haifu_list) return await api.haifu_list(!!onlyYm);
+  let a = []; try { a = JSON.parse(localStorage.getItem(HAIFU_KEY) || '[]'); } catch (e) {}
+  return a.map((x, i) => ({ id: i, played_at: x.at, title: x.title, result: x.summary, yakuman: x.ym ? 1 : 0 }))
+          .filter(x => !onlyYm || x.yakuman).reverse();
+}
+async function haifuLoad(id) {
+  const api = window.pywebview && window.pywebview.api;
+  if (api && api.haifu_load) return await api.haifu_load(id);
+  try { return JSON.parse(localStorage.getItem(HAIFU_KEY) || '[]')[id] || null; } catch (e) { return null; }
+}
+// n 手目までを並べ直した状態
+function haifuState(R, n) {
+  const S = { hands: R.hands.map(h => h.slice()), melds: [[], [], [], []], ponds: [[], [], [], []], doraN: 1,
+              scores: R.scores.slice(), drawn: [null, null, null, null], riichi: [false, false, false, false],
+              turn: R.dealer, last: null, text: '配牌' };
+  const nm = p => R.names[p];
+  for (let i = 0; i < n; i++) {
+    const e = R.ev[i], p = e[1];
+    if (e[0] === 'd') { S.hands[p].push(e[2]); S.drawn[p] = e[2]; S.turn = p; S.last = null; S.text = `${nm(p)}：ツモ`; }
+    else if (e[0] === 'x') {
+      const h = S.hands[p]; h.splice(h.indexOf(e[2]), 1);
+      S.ponds[p].push({ id: e[2], riichi: !!e[3], called: false, giri: e[2] === S.drawn[p] });
+      if (e[3]) S.riichi[p] = true;
+      S.drawn[p] = null; S.turn = p; S.last = { p, id: e[2] };
+      S.text = `${nm(p)}：${e[3] ? '立直 ' : ''}打 ${tileName(e[2] >> 2)}`;
+    } else if (e[0] === 'c') {
+      const [, who, from, type, ids, called] = e;
+      ids.forEach(x => S.hands[who].splice(S.hands[who].indexOf(x), 1));
+      const src = S.ponds[from][S.ponds[from].length - 1]; if (src) src.called = true;
+      S.melds[who].push({ type, ids: ids.concat([called]), called, from: (from - who + 4) % 4 });
+      S.turn = who; S.last = null;
+      S.text = `${nm(who)}：${type === 'chi' ? 'チー' : type === 'pon' ? 'ポン' : 'カン'}（${tileName(called >> 2)}）`;
+    } else if (e[0] === 'a') {
+      const ids = S.hands[p].filter(x => (x >> 2) === e[2]);
+      S.hands[p] = S.hands[p].filter(x => (x >> 2) !== e[2]);
+      S.melds[p].push({ type: 'ankan', ids, called: null, from: 0 }); S.drawn[p] = null;
+      S.text = `${nm(p)}：暗槓（${tileName(e[2])}）`;
+    } else if (e[0] === 'k') {
+      S.hands[p].splice(S.hands[p].indexOf(e[2]), 1);
+      const m = S.melds[p].find(m => m.type === 'pon' && (m.ids[0] >> 2) === (e[2] >> 2));
+      if (m) { m.type = 'kakan'; m.ids.push(e[2]); m.added = e[2]; }
+      S.drawn[p] = null; S.text = `${nm(p)}：加槓（${tileName(e[2] >> 2)}）`;
+    } else if (e[0] === 'n') S.doraN = e[1];
+    else if (e[0] === 'r') S.scores[p] -= 1000;
+  }
+  return S;
+}
+const HV = { R: null, n: 0, onlyYm: false };
+function haifuOpen() { $('haifu').hidden = false; haifuShowList(); }
+function haifuClose() { $('haifu').hidden = true; HV.R = null; }
+async function haifuShowList() {
+  HV.R = null;
+  const box = $('haifu');
+  box.innerHTML = `<div class="hbar"><b>牌譜</b><label><input type="checkbox" id="hfYm"${HV.onlyYm ? ' checked' : ''}> 役満だけ</label><span class="sp"></span><button id="hfClose">閉じる</button></div><div class="hbody" id="hfBody">読み込み中…</div>`;
+  $('hfClose').onclick = haifuClose;
+  $('hfYm').onchange = e => { HV.onlyYm = e.target.checked; haifuShowList(); };
+  let list = [];
+  try { list = await haifuList(HV.onlyYm) || []; } catch (e) {}
+  const body = $('hfBody');
+  if (!list.length) { body.textContent = HV.onlyYm ? '役満の牌譜はまだありません。' : 'まだ牌譜がありません。局が終わるたびに残ります。'; return; }
+  const t = document.createElement('table'); t.className = 'hlist';
+  list.forEach(x => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `<td>${x.played_at}</td><td>${x.title}</td><td class="${x.yakuman ? 'ym' : ''}">${x.result}</td>`;
+    tr.onclick = async () => { const R = await haifuLoad(x.id); if (R) { HV.R = R; HV.n = 0; haifuShowPlay(); } };
+    t.appendChild(tr);
+  });
+  body.innerHTML = ''; body.appendChild(t);
+}
+function haifuShowPlay() {
+  const R = HV.R, N = R.ev.length, n = HV.n, S = haifuState(R, n);
+  const box = $('haifu');
+  box.innerHTML = `<div class="hbar"><button id="hfBack">一覧</button><b>${R.title}</b><span>${R.at}</span>` +
+    `<span class="dora">ドラ表示 <span id="hfDora"></span></span><span class="sp"></span>` +
+    `<button id="hfFirst">⏮</button><button id="hfPrev">◀</button><span>${n} / ${N}</span><button id="hfNext">▶</button><button id="hfLast">⏭</button>` +
+    `<input type="range" id="hfRange" min="0" max="${N}" value="${n}"><button id="hfClose">閉じる</button></div><div class="hbody" id="hfBody"></div>`;
+  for (let i = 0; i < 5; i++) $('hfDora').appendChild(tileEl(i < S.doraN ? (R.dead[4 + i] >> 2) : -1, 'XS'));
+  const go = v => { HV.n = Math.max(0, Math.min(N, v)); haifuShowPlay(); };
+  $('hfBack').onclick = haifuShowList; $('hfClose').onclick = haifuClose;
+  $('hfFirst').onclick = () => go(0); $('hfPrev').onclick = () => go(n - 1);
+  $('hfNext').onclick = () => go(n + 1); $('hfLast').onclick = () => go(N);
+  $('hfRange').oninput = e => go(+e.target.value);
+  $('hfFirst').disabled = $('hfPrev').disabled = n === 0; $('hfNext').disabled = $('hfLast').disabled = n === N;
+  const body = $('hfBody');
+  const act = document.createElement('div'); act.className = 'act'; act.textContent = n === N ? '局の終わり' : S.text; body.appendChild(act);
+  const winds = '東南西北';
+  for (let p = 0; p < 4; p++) {
+    const row = document.createElement('div'); row.className = 'hp' + (S.turn === p && n < N ? ' turn' : '');
+    const who = document.createElement('div'); who.className = 'who';
+    who.innerHTML = `${winds[(p - R.dealer + 4) % 4]}　${R.names[p]}<br>${S.scores[p].toLocaleString()}${S.riichi[p] ? '　立直' : ''}`;
+    const rows = document.createElement('div'); rows.className = 'rows';
+    const l1 = document.createElement('div'); l1.className = 'line';
+    const h = document.createElement('div'); h.className = 'hand';
+    const ids = S.hands[p].slice(), dr = S.drawn[p];
+    if (dr !== null && ids.includes(dr)) ids.splice(ids.indexOf(dr), 1);
+    sortIds(ids).forEach(id => h.appendChild(tileEl(id >> 2, 'S')));
+    if (dr !== null && S.hands[p].includes(dr)) h.appendChild(tileEl(dr >> 2, 'S', 'drawn'));
+    l1.appendChild(h);
+    if (S.melds[p].length) { const md = document.createElement('div'); md.className = 'melds'; S.melds[p].slice().reverse().forEach(m => md.appendChild(meldEl(m, 'XS'))); l1.appendChild(md); }
+    const pd = document.createElement('div'); pd.className = 'pond';
+    S.ponds[p].forEach(x => {
+      const t = tileEl(x.id >> 2, 'XS', (x.riichi ? 'yoko ' : '') + (x.called ? 'called ' : '') + (x.giri ? 'giri' : ''));
+      if (S.last && S.last.p === p && S.last.id === x.id) t.classList.add('lastd');
+      pd.appendChild(t);
+    });
+    rows.appendChild(l1); rows.appendChild(pd);
+    row.appendChild(who); row.appendChild(rows); body.appendChild(row);
+  }
+  if (n === N && R.res) {
+    const r = R.res, d = document.createElement('div'); d.className = 'act';
+    if (r.t === 'win') {
+      d.innerHTML = `<b class="${r.ym ? 'ym' : ''}">${R.names[r.w]}　${r.tsumo ? 'ツモ' : 'ロン（' + R.names[r.f] + 'から）'}　${r.limit || (r.fu + '符 ' + r.han + '翻')}　${r.pay}</b><br>` +
+        r.yaku.map(([y, hn]) => `${y}（${r.ym ? '役満' : hn + '翻'}）`).join('　');
+    } else d.innerHTML = `流局　聴牌：${R.names.filter((_, i) => r.ten[i]).join('・') || 'なし'}`;
+    d.innerHTML += '<br>' + R.names.map((nm, i) => `${nm} ${r.delta[i] > 0 ? '+' : ''}${r.delta[i]}`).join('　');
+    body.appendChild(d);
+  }
+}
+document.addEventListener('keydown', e => {
+  const box = document.getElementById('haifu');
+  if (!box || box.hidden) return;
+  if (e.key === 'Escape') { e.preventDefault(); haifuClose(); return; }
+  if (!HV.R) return;
+  const N = HV.R.ev.length;
+  const go = v => { e.preventDefault(); HV.n = Math.max(0, Math.min(N, v)); haifuShowPlay(); };
+  if (e.key === 'ArrowRight') go(HV.n + 1);
+  else if (e.key === 'ArrowLeft') go(HV.n - 1);
+  else if (e.key === 'Home') go(0);
+  else if (e.key === 'End') go(N);
+});
 // ---- 途中の保存（局の頭から再開） ------------------------------------
 const pyApi = () => window.pywebview && window.pywebview.api;
 async function saveProgress() {
@@ -1175,6 +1435,7 @@ async function gameLoop(resume) {
   while (true) {
     await saveProgress();
     const r = await playHand();
+    await recFinish(r);
     G.result = r; G.hands++;
     render();
     await showResult(r);
@@ -1256,14 +1517,14 @@ function handEl(P, size, forSelf) {
   let drawn = null;
   if (G.drawnId !== null && G.turn === P.i && ids.includes(G.drawnId)) { drawn = G.drawnId; ids.splice(ids.indexOf(drawn), 1); }
   sortIds(ids);
-  const hintId = (forSelf && UI.hint && pending && pending.kind === 'self' && !G.players[0].riichi) ? chooseDiscard(0, true).id : null;
+  const hintId = (forSelf && UI.hint && pending && pending.kind === 'self' && !G.players[0].riichi) ? chooseDiscard(0, true, UI.hintStyle).id : null;
   const add = (id, isDrawn) => {
     const t = tileEl(reveal ? id >> 2 : -1, size, isDrawn ? 'drawn' : '');
     if (forSelf && pending && pending.kind === 'self') {
       const ok = UI.riichiMode ? pending.opts.riichiIds.has(id) : pending.opts.allowed.has(id);
       if (ok) {
         t.classList.add('can');
-        t.onclick = () => pending && pending.resolve({ type: 'discard', id, riichi: UI.riichiMode });
+        t.onclick = () => humanDiscard(id);
       } else t.classList.add('cannot');
       if (id === hintId && !UI.riichiMode) t.classList.add('hint');
     }
@@ -1363,6 +1624,7 @@ function renderActions() {
   if (pending.kind === 'self') {
     if (o.tsumo) btn('ツモ', 'win', () => pending.resolve({ type: 'tsumo', res: o.tsumo }));
     if (o.riichiIds) btn(UI.riichiMode ? '立直をやめる' : '立直', 'riichi' + (UI.riichiMode ? ' on' : ''), () => { UI.riichiMode = !UI.riichiMode; render(); });
+    if (o.undo) btn('鳴きを取り消す', 'skip', () => pending.resolve({ type: 'undoCall' }));
     for (const k of o.kans) btn((k.kan === 'ankan' ? '暗槓 ' : '加槓 ') + tileName(k.kind), 'kan', () => pending.resolve({ type: 'kan', kan: k.kan, kind: k.kind }));
     const msg = document.createElement('div'); msg.className = 'amsg';
     msg.textContent = UI.riichiMode ? '立直：光っている牌から切ってください' : (G.players[0].riichi ? 'ツモ切りです' : '切る牌をクリック');
@@ -1439,6 +1701,23 @@ function render() {
   renderActions();
   if (UI.view === 'taku') { renderTaku(); fitBoard(); } else renderYoko();
   renderSide();
+}
+
+// ツモ和了できる局面で牌を切ろうとしたら、誤タップ防止のため確認する
+async function humanDiscard(id) {
+  const p = pending;
+  if (!p || p.kind !== 'self' || p.busy) return;
+  const riichi = UI.riichiMode;
+  if (p.opts.tsumo) {
+    p.busy = true;
+    const r = await modal('<h2>ツモ和了できます</h2><p>和了らずに、この牌を切りますか？</p>',
+      [['ツモ和了する', 'tsumo', 'primary'], ['和了らずに切る', 'discard', ''], ['やめる（選び直す）', 'cancel', '']]);
+    p.busy = false;
+    if (pending !== p) return;
+    if (r === 'tsumo') return p.resolve({ type: 'tsumo', res: p.opts.tsumo });
+    if (r !== 'discard') return;
+  }
+  p.resolve({ type: 'discard', id, riichi });
 }
 
 // ---- 結果の表示 --------------------------------------------------------
@@ -1565,7 +1844,9 @@ function bindControls() {
   chk('optHint', 'hint'); chk('optGiri', 'autoGiri'); chk('optNoCall', 'noCalls'); chk('optCpu', 'showCpu');
   $('voiceSelf').onchange = e => { UI.voiceSelf = e.target.value; saveUI(); };
   $('speedSel').onchange = e => { UI.speed = e.target.value; saveUI(); };
+  $('hintSel').onchange = e => { UI.hintStyle = e.target.value; saveUI(); render(); };
   $('voiceCpu').onchange = e => { UI.voiceCpu = e.target.value; saveUI(); };
+  $('btnHaifu').onclick = () => { if ($('side')) $('side').classList.remove('open'); haifuOpen(); };
   $('btnNew').onclick = async () => {
     if (G.running) {
       const v = await modal('<h2>新しい対局</h2><p>いまの対局をやめて、最初からやり直しますか？</p>', [['やり直す', 1, 'primary'], ['続ける', 0]]);
@@ -1579,7 +1860,7 @@ function bindControls() {
   $('lenSel').onchange = e => { CFG.game_length = e.target.value; try { localStorage.setItem('mahjong_len', e.target.value); } catch (x) {} };
   window.addEventListener('resize', () => { if (UI.view === 'taku') fitBoard(); });
   document.addEventListener('keydown', e => {
-    if (!pending || !$('modal').hidden) return;
+    if (!pending || !$('modal').hidden || !$('haifu').hidden) return;
     if (e.key === 'Escape' || e.key === ' ') {
       if (pending.kind === 'react') { e.preventDefault(); pending.resolve({ type: 'skip' }); }
     }
@@ -1594,6 +1875,7 @@ function syncControls() {
     `<option value="${k}">${v[0]}（${((v[1] === null ? CFG.cpu_delay_ms : v[1]) / 1000).toFixed(2).replace(/0$/, '')}秒）</option>`).join('');
   $('speedSel').value = SPEEDS[UI.speed] ? UI.speed : 'normal';
   $('lenSel').value = CFG.game_length;
+  $('hintSel').value = UI.hintStyle === 'yaku' ? 'yaku' : 'speed';
 }
 function startGame(resume) {
   $('modal').hidden = true;
